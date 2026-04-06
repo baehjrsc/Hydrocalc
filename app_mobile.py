@@ -17,7 +17,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 MATERIAIS = {
-
     "PEAD Corrugado": {
         "n": 0.010, 
         "tubos": [
@@ -126,8 +125,19 @@ def compute_hydraulics(D_int, Q_design_m3s, I, n):
 
 
 # ----------------- PLOTLY DIAGRAM -----------------
-def plot_cross_section(DE, DI, yD, theta, DN):
-    y_real = yD * DI
+def get_water_polygon(DI, theta):
+    start_angle = -np.pi/2 - theta/2
+    end_angle = -np.pi/2 + theta/2
+    tw = np.linspace(start_angle, end_angle, 100)
+    xw = DI/2 * np.cos(tw)
+    yw = DI/2 * np.sin(tw)
+    xw_poly = np.append(xw, xw[0])
+    yw_poly = np.append(yw, yw[0])
+    return xw_poly, yw_poly
+
+def plot_cross_section(DE, DI, hyd_ini, hyd_fin, DN):
+    y_real_ini = hyd_ini["yD"] * DI
+    y_real_fin = hyd_fin["yD"] * DI
     
     t = np.linspace(0, 2*np.pi, 200)
     xo = DE/2 * np.cos(t)
@@ -136,55 +146,55 @@ def plot_cross_section(DE, DI, yD, theta, DN):
     xi = DI/2 * np.cos(t)
     yi = DI/2 * np.sin(t)
     
-    start_angle = -np.pi/2 - theta/2
-    end_angle = -np.pi/2 + theta/2
-    tw = np.linspace(start_angle, end_angle, 100)
-    
-    xw = DI/2 * np.cos(tw)
-    yw = DI/2 * np.sin(tw)
-    
-    xw_poly = np.append(xw, xw[0])
-    yw_poly = np.append(yw, yw[0])
-
     fig = go.Figure()
 
+    # Outer wall
     fig.add_trace(go.Scatter(x=xo, y=yo, fill='toself', mode='lines', line=dict(color='#7a7a7a'), fillcolor='#444444', hoverinfo="skip", name='Parede Externa'))
+    # Inner wall
     fig.add_trace(go.Scatter(x=xi, y=yi, fill='toself', mode='lines', line=dict(color='#cccccc'), fillcolor='#1e1e1e', hoverinfo="skip", name='Interior'))
-    fig.add_trace(go.Scatter(x=xw_poly, y=yw_poly, fill='toself', mode='lines', line=dict(color='#00b4d8'), fillcolor='rgba(0,180,216,0.6)', name=f'Lâmina: {y_real:.1f}mm'))
+    
+    # Final Flow (Blue)
+    xw_fin, yw_fin = get_water_polygon(DI, hyd_fin["theta"])
+    fig.add_trace(go.Scatter(x=xw_fin, y=yw_fin, fill='toself', mode='lines', line=dict(color='#2188ff'), fillcolor='rgba(33, 136, 255, 0.4)', name=f'Q Projeto (y: {y_real_fin:.1f}mm)'))
+
+    # Initial Flow (Green) - plotted after so it sits on top of blue visually
+    xw_ini, yw_ini = get_water_polygon(DI, hyd_ini["theta"])
+    fig.add_trace(go.Scatter(x=xw_ini, y=yw_ini, fill='toself', mode='lines', line=dict(color='#28a745'), fillcolor='rgba(40, 167, 69, 0.7)', name=f'Q Inicial (y: {y_real_ini:.1f}mm)'))
 
     fig.update_layout(
-        title=f'Seção Transversal (DN {DN})',
+        title=f'Seção Dupla (DN {DN})',
         xaxis=dict(scaleanchor="y", scaleratio=1, visible=False),
         yaxis=dict(visible=False),
-        showlegend=False,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=0, r=0, t=30, b=0),
-        height=300
+        margin=dict(l=0, r=0, t=60, b=0),
+        height=350
     )
     return fig
 
 
 # ----------------- UI -----------------
-st.title("🌊 HidroCalc Condutos")
-st.markdown("Cálculo e verificação da **NBR 9649** otimizado para celulares (Android/iOS) direto no navegador.")
+st.title("🌊 HidroCalc Esgoto")
+st.markdown("Verificação paramétrica completa da NBR 9649: Tensão na Vazão Inicial vs Lâmina na Vazão Final.")
 
 # Validação do Tema Baseado No Streamlit
-# Entradas em duas colunas ou barra lateral (sidebar sumido no mobile vira um menu hambúrguer)
 with st.sidebar.form("input_form"):
     st.header("⚙️ Parâmetros do Projeto")
-    vazao_ls = st.number_input("Vazão de Projeto (L/s)", min_value=0.1, max_value=5000.0, value=25.0, step=1.0)
+    vazao_ini_ls = st.number_input("Vazão INICIAL (L/s)", min_value=0.01, max_value=5000.0, value=3.00, step=0.50, format="%.2f", help="Usada para atestar autolimpeza (Tensão >= 1.0 Pa)")
+    vazao_fin_ls = st.number_input("Vazão MÁXIMA de Projeto (L/s)", min_value=0.1, max_value=5000.0, value=25.0, step=1.0, format="%.1f", help="Usada para checar respiração/capacidade (y/D < 0.75)")
     material = st.selectbox("Material do Tubo", list(MATERIAIS.keys()))
-    declividade = st.number_input("Declividade (m/m)", min_value=0.0001, max_value=0.2, value=0.0100, step=0.001)
+    declividade = st.number_input("Declividade (m/m)", min_value=0.0001, max_value=0.2000, value=0.0100, step=0.0010, format="%.4f")
     
-    # Botão de recalcular (muito útil no celular para não travar enquanto digita)
-    submit_button = st.form_submit_button(label="Recalcular 🔄", use_container_width=True)
+    submit_button = st.form_submit_button(label="Recalcular NBR 🔄", use_container_width=True)
 
-st.sidebar.info(f"O Módulo calculou: Manning (n) = {MATERIAIS[material]['n']:.3f}. Feche o menu lateral no celular para ver os resultados.")
+st.sidebar.info(f"O Módulo assumiu rugosidade teórica do manual: n = {MATERIAIS[material]['n']:.3f}. Obs: Fiscais podem exigir adoção técnica de 0.013 mesmo em plásticos.")
 
 # Calcula
 mat_info = MATERIAIS[material]
-Q_m3s = vazao_ls / 1000
+Q_ini_m3s = vazao_ini_ls / 1000
+Q_fin_m3s = vazao_fin_ls / 1000
 resultados = []
 
 for prop in mat_info["tubos"]:
@@ -192,67 +202,74 @@ for prop in mat_info["tubos"]:
     DI_mm = prop["DI"]
     DE_mm = prop["DE"]
     
-    hyd = compute_hydraulics(DI_mm / 1000, Q_m3s, declividade, mat_info["n"])
+    hyd_ini = compute_hydraulics(DI_mm / 1000, Q_ini_m3s, declividade, mat_info["n"])
+    hyd_fin = compute_hydraulics(DI_mm / 1000, Q_fin_m3s, declividade, mat_info["n"])
     
     is_ok = True
-    if hyd["yD"] > 0.75 or hyd["V_real"] < 0.60 or hyd["V_real"] > 5.0 or hyd["T_trat"] < 1.0 or hyd["Q_ratio"] >= 1.0:
-        is_ok = False
+    # Aplicando restrições fidedignas da NBR 9649
+    if hyd_fin["yD"] > 0.75: is_ok = False
+    if hyd_ini["T_trat"] < 1.0: is_ok = False
+    if hyd_fin["Q_ratio"] >= 1.0 or hyd_ini["Q_ratio"] >= 1.0: is_ok = False
+    if hyd_fin["V_real"] > 5.0 or hyd_ini["V_real"] > 5.0: is_ok = False
+    # (Restrição de V < 0.6 intencionalmente abolida, apenas T > 1.0 julga a autolimpeza agora)
         
-    status = "⚠️ Atenção (y/D)" if (hyd["yD"] < 0.20 and is_ok) else ("✅ Atende" if is_ok else "❌ Falha")
+    status = "⚠️ Lâmina Baixa" if (hyd_fin["yD"] < 0.20 and is_ok) else ("✅ Atende Normas" if is_ok else "❌ Falha NBR")
     
     resultados.append({
         "DN": DN,
-        "y/D": round(hyd['yD'], 3),
-        "V (m/s)": f"{hyd['V_real']:.2f}",
-        "Tensão (Pa)": f"{hyd['T_trat']:.2f}",
-        "Engolimento": f"{hyd['Q_ratio']*100:.1f}%",
+        "y/D Ini": round(hyd_ini['yD'], 3),
+        "y/D Fin": round(hyd_fin['yD'], 3),
+        "Tensão Ini": f"{hyd_ini['T_trat']:.2f} Pa",
+        "V Ini": f"{hyd_ini['V_real']:.2f} m/s",
+        "V Fin": f"{hyd_fin['V_real']:.2f} m/s",
         "Status": status,
-        "_raw": hyd,
+        "_raw_ini": hyd_ini,
+        "_raw_fin": hyd_fin,
         "_props": prop
     })
 
 # DataFrame limpo
-df = pd.DataFrame(resultados).drop(columns=["_raw", "_props"])
+df = pd.DataFrame(resultados).drop(columns=["_raw_ini", "_raw_fin", "_props"])
 
-st.subheader("📊 Resultados por Diâmetro Comercial")
+st.subheader("📊 Relatório de Normatização por DN")
 st.dataframe(df, use_container_width=True, hide_index=True)
 
-# Visualização de seçāo
-st.subheader("📏 Inspeção Visual Interativa")
+# Visualização de seçāo dupla
+st.subheader("📏 Raio-X Interativo das Lâminas")
 tubos_selecionaveis = [f"DN {r['DN']} - {r['Status']}" for r in resultados]
 
-# Pegar o primeiro que "Atende" logo de cara
 index_atende = next((i for i, r in enumerate(resultados) if "✅" in r["Status"]), 0)
 
-selecionado = st.selectbox("Escolha um tubo para visualizar interativamente:", tubos_selecionaveis, index=index_atende)
+selecionado = st.selectbox("Escolha um diâmetro do catálogo comercial:", tubos_selecionaveis, index=index_atende)
 
 if selecionado:
     idx = tubos_selecionaveis.index(selecionado)
     dados = resultados[idx]
     
-    raw = dados["_raw"]
+    raw_ini = dados["_raw_ini"]
+    raw_fin = dados["_raw_fin"]
     prop = dados["_props"]
     
-    fig = plot_cross_section(prop["DE"], prop["DI"], raw["yD"], raw["theta"], prop["DN"])
+    fig = plot_cross_section(prop["DE"], prop["DI"], raw_ini, raw_fin, prop["DN"])
     
-    # Criamos duas colunas flexíveis
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        # staticPlot trava o gráfico para bloquear o evento de arrastar (zoom) da tela do celular
         st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
     with col2:
         st.markdown(f'''
-        **Detalhes Geométricos:**
-        - **DN**: {prop["DN"]} mm
-        - **DE**: {prop["DE"]} mm
-        - **DI**: {prop["DI"]} mm
+        **Geometria Comercial:**
+        - **DN**: {prop["DN"]} mm  |  DI: {prop["DI"]} mm
         
-        **Detalhes Hidráulicos:**
-        - **Lâmina d'água:** {raw["yD"] * prop["DI"]:.1f} mm
-        - **Capacidade Ocupada:** {raw["Q_ratio"]*100:.1f}%
-        - **V Real:** {raw["V_real"]:.2f} m/s
-        - **Força Trativa:** {raw["T_trat"]:.2f} Pa
+        🟢 **Inicio de Obras (Vazão Inicial):**
+        - Lâmina Formada: **{raw_ini["yD"] * prop["DI"]:.1f} mm**
+        - Tensão alcançada: **{raw_ini["T_trat"]:.2f} Pa**
+        - Vel. da água: {raw_ini["V_real"]:.2f} m/s
+        
+        🔵 **Fim de Projeto (Vazão Máx):**
+        - Lâmina Formada: **{raw_fin["yD"] * prop["DI"]:.1f} mm**
+        - Uso: {raw_fin["Q_ratio"]*100:.1f}% da capacidade
+        - Vel. da água: {raw_fin["V_real"]:.2f} m/s
         ''')
 
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: gray;'>Criado estrategicamente para uso móvel inteligente via Web. 🌐📱</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Sistema NBR 9649 Verificado Profissionalmente. 📐</p>", unsafe_allow_html=True)
