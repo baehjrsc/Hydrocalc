@@ -9,9 +9,10 @@ st.set_page_config(page_title="HidroCalc Mobile", page_icon="🌊", layout="cent
 
 st.markdown("""
 <style>
-    /* Remove a atualização de "puxar para baixo" no celular e o efeito elástico */
-    body, .stApp {
-        overscroll-behavior-y: none !important;
+    /* Bloqueio Agressivo de Arraste (Pull-to-refresh) do navegador móvel */
+    html, body, #root, .stApp, [data-testid="stAppViewContainer"], .block-container {
+        overscroll-behavior-y: contain !important;
+        overscroll-behavior-x: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
