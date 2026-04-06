@@ -7,7 +7,17 @@ import pandas as pd
 # ----------------- CONFIG & DATA -----------------
 st.set_page_config(page_title="HidroCalc Mobile", page_icon="🌊", layout="centered")
 
+st.markdown("""
+<style>
+    /* Remove a atualização de "puxar para baixo" no celular e o efeito elástico */
+    body, .stApp {
+        overscroll-behavior-y: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 MATERIAIS = {
+
     "PEAD Corrugado": {
         "n": 0.010, 
         "tubos": [
@@ -228,7 +238,8 @@ if selecionado:
     # Criamos duas colunas flexíveis
     col1, col2 = st.columns([1.5, 1])
     with col1:
-        st.plotly_chart(fig, use_container_width=True)
+        # staticPlot trava o gráfico para bloquear o evento de arrastar (zoom) da tela do celular
+        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
     with col2:
         st.markdown(f'''
         **Detalhes Geométricos:**
